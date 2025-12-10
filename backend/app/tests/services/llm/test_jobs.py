@@ -21,6 +21,8 @@ from app.models.llm import (
     Usage,
 )
 from app.models.llm.request import ConfigBlob, LLMCallConfig
+from app.safety.guardrail_config import GuardrailConfigRoot, GuardrailConfig
+from app.safety.validators.pii_remover import PIIRemoverSafetyValidatorConfig
 from app.services.llm.jobs import (
     start_job,
     handle_job_error,
@@ -523,6 +525,54 @@ class TestExecuteJob:
             db.refresh(job_for_execution)
             assert job_for_execution.status == JobStatus.FAILED
 
+    def test_guardrails_sanitize_input_before_provider(
+        self, db, job_env, job_for_execution
+    ):
+        """
+        Guardrails should run inside execute_job, sanitize the input,
+        and then pass the cleaned input to the provider.
+        """
+
+        env = job_env
+
+        # Provider returns a mock success
+        env["provider"].execute.return_value = (
+            env["mock_llm_response"],
+            None,
+        )
+
+        unsafe_input = "My credit card is 4111 1111 1111 1111"
+
+        request_data = {
+            "query": {"input": unsafe_input},
+            "config": {
+                "blob": {
+                    "completion": {
+                        "provider": "openai",
+                        "params": {"model": "gpt-4"}
+                    }
+                }
+            },
+            "guardrails": GuardrailConfigRoot(
+                guardrails=GuardrailConfig(
+                    input=[PIIRemoverSafetyValidatorConfig(type="pii_remover")],
+                    output=[]
+                )
+            ),
+            "include_provider_raw_response": False,
+            "callback_url": None,
+        }
+
+        result = self._execute_job(job_for_execution, db, request_data)
+
+        # Verify provider received sanitized input
+        provider_call_args = env["provider"].execute.call_args[1]["query"]
+        assert "4111" not in provider_call_args.input
+
+        # Job must succeed
+        assert result["success"]
+        db.refresh(job_for_execution)
+        assert job_for_execution.status == JobStatus.SUCCESS
 
 class TestResolveConfigBlob:
     """Test suite for resolve_config_blob function."""

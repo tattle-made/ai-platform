@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlmodel import Field, SQLModel
 from pydantic import model_validator, HttpUrl
 
+from app.safety.guardrail_config import GuardrailConfigRoot
 
 class ConversationConfig(SQLModel):
     id: str | None = Field(
@@ -144,6 +145,13 @@ class LLMCallRequest(SQLModel):
             "Complete LLM call configuration, provided either by reference (id + version) "
             "or as config blob. Use the blob only for testing/validation; "
             "in production, always use the id + version."
+        ),
+    )
+    guardrails: GuardrailConfigRoot | None = Field(
+        default=None,
+        description=(
+            "Optional guardrails configuration to apply input/output validation. "
+            "If not provided, no guardrails will be applied."
         ),
     )
     callback_url: HttpUrl | None = Field(
