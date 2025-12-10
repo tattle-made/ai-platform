@@ -30,6 +30,15 @@ def load_hub_validator_class(v_type: str):
     module = importlib.import_module("guardrails.hub")
     return getattr(module, class_name)
 
+def is_validator_loaded(class_name: str) -> bool:
+    """
+    Check if guardrails.hub.<ClassName> already exists.
+    """
+    try:
+        module = importlib.import_module("guardrails.hub")
+        return hasattr(module, class_name)
+    except Exception:
+        return False
 
 
 def ensure_hub_validator_installed(v_type: str):
@@ -37,6 +46,7 @@ def ensure_hub_validator_installed(v_type: str):
     if v_type not in HUB_VALIDATORS:
         return
 
-    module_path = f"guardrails.hub.{v_type}"
-    if not is_importable(module_path):
+    class_name = "".join(part.capitalize() for part in v_type.split("_"))
+    # The ONLY reliable check
+    if not is_validator_loaded(class_name):
         install_hub_validator(HUB_VALIDATORS[v_type])

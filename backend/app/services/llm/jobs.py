@@ -151,7 +151,7 @@ def execute_job(
             logger.info(
                 f"[execute_job] Input guardrail validation | Original query={input_query}, safe_input={safe_input}/"
             )
-            input_query = safe_input
+            request.query.input = safe_input.validated_output
 
         with Session(engine) as session:
             # Update job status to PROCESSING
@@ -203,12 +203,12 @@ def execute_job(
 
         if response:
             if guardrail:
-                output_text = response.output.text
+                output_text = response.response.output.text
                 safe_output = guardrails_engine.run_output_validators(output_text)
                 logger.info(
                     f"[execute_job] Output guardrail validation | Original output={output_text}, safe_output={safe_output}/"
                 )
-                response.output.text = safe_output
+                response.response.output.text = safe_output
 
             callback_response = APIResponse.success_response(
                 data=response, metadata=request.request_metadata
