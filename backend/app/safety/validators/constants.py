@@ -1,4 +1,5 @@
 SLUR_LIST_FILENAME = "curated_slurlist_hi_en.csv"
+GENDER_BIAS_LIST_FILENAME = "gender_assumption_bias_words.csv"
 BAN_LIST = "ban_list"
 
 LANG_HINDI = "hi"
