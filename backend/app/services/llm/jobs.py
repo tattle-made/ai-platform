@@ -13,7 +13,7 @@ from app.models.llm.request import ConfigBlob, LLMCallConfig
 from app.utils import APIResponse, send_callback
 from app.celery.utils import start_high_priority_job
 from app.services.llm.providers.registry import get_llm_provider
-
+from app.safety.guardrails_engine import GuardrailsEngine
 
 logger = logging.getLogger(__name__)
 
@@ -132,14 +132,27 @@ def execute_job(
 
     # one of (id, version) or blob is guaranteed to be present due to prior validation
     config = request.config
+    guardrail = request.guardrails
+    guardrails_engine = None
+    input_query = request.query.input
     callback_response = None
     config_blob: ConfigBlob | None = None
 
     logger.info(
-        f"[execute_job] Starting LLM job execution | job_id={job_id}, task_id={task_id}, "
+        f"[execute_job] Starting LLM job execution | job_id={job_id}, task_id={task_id}, guardrail={guardrail}, input_query={input_query}"
     )
 
+    if guardrail:
+        guardrails_engine = GuardrailsEngine(guardrail)
+
     try:
+        if guardrail:
+            safe_input = guardrails_engine.run_input_validators(input_query)
+            logger.info(
+                f"[execute_job] Input guardrail validation | Original query={input_query}, safe_input={safe_input}/"
+            )
+            request.query.input = safe_input.validated_output
+
         with Session(engine) as session:
             # Update job status to PROCESSING
             job_crud = JobCrud(session=session)
@@ -189,6 +202,14 @@ def execute_job(
         )
 
         if response:
+            if guardrail:
+                output_text = response.response.output.text
+                safe_output = guardrails_engine.run_output_validators(output_text)
+                logger.info(
+                    f"[execute_job] Output guardrail validation | Original output={output_text}, safe_output={safe_output}/"
+                )
+                response.response.output.text = safe_output
+
             callback_response = APIResponse.success_response(
                 data=response, metadata=request.request_metadata
             )

@@ -150,7 +150,16 @@ services:
       POSTGRES_SERVER: db
       REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq
-    command: ["uv", "run", "celery", "-A", "app.celery.celery_app", "worker", "--loglevel=info"]
+      GUARDRAILS_HUB_API_KEY: ${GUARDRAILS_HUB_API_KEY}
+      GUARDRAILS_HUB_ID: docker-worker
+    command: >
+      sh -c "
+        echo 'id=${GUARDRAILS_HUB_ID}' > /root/.guardrailsrc &&
+        echo 'token=${GUARDRAILS_HUB_API_KEY}' >> /root/.guardrailsrc &&
+        echo 'enable_metrics=true' >> /root/.guardrailsrc &&
+        echo 'use_remote_inferencing=true' >> /root/.guardrailsrc &&
+        uv run celery -A app.celery.celery_app worker --loglevel=info
+      "
 
   celery_flower:
     image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG:-latest}"
