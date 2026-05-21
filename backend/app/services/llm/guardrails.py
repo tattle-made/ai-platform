@@ -17,6 +17,7 @@ def run_guardrails_validation(
     project_id: int | None,
     organization_id: int | None,
     suppress_pass_logs: bool = True,
+    output_text: str | None = None,
 ) -> dict[str, Any]:
     """
     Call the Kaapi guardrails service to validate and process input text.
@@ -28,6 +29,7 @@ def run_guardrails_validation(
         project_id: Project identifier expected by guardrails API.
         organization_id: Organization identifier expected by guardrails API.
         suppress_pass_logs: Whether to suppress successful validation logs in guardrails service.
+        output_text: LLM output text, required for validators that evaluate input/output pairs.
 
     Returns:
         JSON response from the guardrails service with validation results.
@@ -39,13 +41,16 @@ def run_guardrails_validation(
         for validator in guardrail_config
     ]
 
-    payload = {
+    payload: dict[str, Any] = {
         "request_id": str(job_id),
         "project_id": project_id,
         "organization_id": organization_id,
         "input": input_text,
         "validators": validators,
     }
+
+    if output_text is not None:
+        payload["output"] = output_text
 
     headers = {
         "accept": "application/json",

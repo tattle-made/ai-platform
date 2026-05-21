@@ -126,14 +126,25 @@ def resolved_input_context(
 
 
 def validate_text_with_guardrails(
-    text: str,
+    input_text: str,
     guardrails: list[dict[str, Any]],
     job_id: UUID,
     project_id: int,
     organization_id: int,
     guardrail_type: str,  # "input" or "output"
+    output_text: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Validate text against guardrails.
+
+    Args:
+        input_text: User query text, maps to payload["input"].
+        guardrails: List of validator configurations to apply.
+        job_id: Unique identifier for the request.
+        project_id: Project identifier.
+        organization_id: Organization identifier.
+        guardrail_type: "input" or "output".
+        output_text: LLM response text, maps to payload["output"]. Required for validators
+            that evaluate input/output pairs.
 
     Returns:
         (validated_text, error_message)
@@ -142,12 +153,13 @@ def validate_text_with_guardrails(
         - If bypassed: (original_text, None)
     """
     safe_result = run_guardrails_validation(
-        text,
+        input_text,
         guardrails,
         job_id,
         project_id,
         organization_id,
         suppress_pass_logs=True,
+        output_text=output_text,
     )
 
     logger.info(
@@ -160,7 +172,7 @@ def validate_text_with_guardrails(
             f"[validate_text_with_guardrails] Guardrails bypassed (service unavailable) | "
             f"job_id={job_id}"
         )
-        return text, None
+        return output_text if output_text is not None else input_text, None
 
     if safe_result["success"]:
         validated_text = safe_result["data"]["safe_text"]
@@ -276,6 +288,12 @@ def execute_job(
                         output_validator_configs=config_blob.output_guardrails,
                     )
 
+            original_input_text: str | None = (
+                request.query.input.content.value
+                if isinstance(request.query.input, TextInput)
+                else None
+            )
+
             if input_guardrails:
                 if not isinstance(request.query.input, TextInput):
                     logger.info(
@@ -284,7 +302,7 @@ def execute_job(
                     )
                 else:
                     validated_text, error = validate_text_with_guardrails(
-                        request.query.input.content.value,
+                        original_input_text,
                         input_guardrails,
                         job_uuid,
                         project_id,
@@ -417,14 +435,15 @@ def execute_job(
                         f"job_id={job_uuid}, output_type={getattr(response.response.output, 'type', type(response.response.output).__name__)}"
                     )
                 else:
-                    output_text = response.response.output.content.value
+                    llm_output = response.response.output.content.value
                     validated_text, error = validate_text_with_guardrails(
-                        output_text,
+                        original_input_text or "",
                         output_guardrails,
                         job_uuid,
                         project_id,
                         organization_id,
                         guardrail_type="output",
+                        output_text=llm_output,
                     )
 
                     if error:
